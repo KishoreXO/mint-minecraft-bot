@@ -1,4 +1,4 @@
-# mc-jev-bot
+# mint-minecraft-bot
 
 An autonomous Minecraft survival bot. It joins your world as a normal player (called **Mint** by
 default) and plays survival by itself, from empty hands to a full diamond kit, while a live web
