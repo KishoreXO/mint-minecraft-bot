@@ -1,0 +1,58 @@
+{
+  "name": "mc-jev-bot",
+  "version": "1.0.0",
+  "description": "An autonomous Minecraft survival bot that plays from empty hands to a full diamond kit, with a live web dashboard and 3D view.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "fresh": "node fresh-start.js",
+    "lint": "eslint .",
+    "test": "node test/run-all.js",
+    "logs": "node tools/summarize-logs.js",
+    "stats": "node tools/backfill-stats.js"
+  },
+  "keywords": [
+    "minecraft",
+    "mineflayer",
+    "bot",
+    "survival",
+    "autonomous",
+    "pathfinding",
+    "prismarine-viewer"
+  ],
+  "author": "Kishore Muniyasamy",
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@nxg-org/mineflayer-custom-pvp": "^1.7.16",
+    "@typesafe-ai/sdk": "^0.6.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.22.3",
+    "minecraft-data": "^3.116.0",
+    "mineflayer": "^4.39.0",
+    "mineflayer-armor-manager": "^2.0.1",
+    "mineflayer-auto-eat": "^5.0.3",
+    "mineflayer-bloodhound": "^0.0.2",
+    "mineflayer-pathfinder": "^2.4.5",
+    "mineflayer-tool": "^1.2.0",
+    "prismarine-block": "^1.23.0",
+    "prismarine-chunk": "^1.41.0",
+    "prismarine-item": "^1.18.0",
+    "prismarine-physics": "^1.11.1",
+    "prismarine-registry": "^1.12.0",
+    "prismarine-viewer": "^1.33.0",
+    "prismarine-world": "^3.7.0",
+    "socket.io": "^4.8.4",
+    "undici": "^8.11.2",
+    "vec3": "^0.1.10"
+  },
+  "devDependencies": {
+    "eslint": "^10.11.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

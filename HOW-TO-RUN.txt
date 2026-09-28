@@ -1,0 +1,266 @@
+===============================================================================
+  HOW TO RUN THE BOT  (mc-jev-bot; the bot joins as "Mint" unless you rename it)
+===============================================================================
+
+This file covers only how to get the bot running, watch it, and stop it.
+For what the bot does and how it works, read BOT-GUIDE.txt.
+
+
+-------------------------------------------------------------------------------
+ 1. WHAT YOU NEED
+-------------------------------------------------------------------------------
+
+  - Minecraft Java Edition 1.21.9 (the version the bot is built and tested on).
+  - Node.js 22.19 or newer (https://nodejs.org).
+      Check it:   node -v
+  - A TypeSafe (Jev) API key. The bot still runs without one, but every
+    decision then falls back to its built-in instincts.
+  - About 1 GB of free memory while the bot and Minecraft both run. The 3D view
+    on the website uses more, see section 7.
+
+
+-------------------------------------------------------------------------------
+ 2. FIRST-TIME SETUP (once)
+-------------------------------------------------------------------------------
+
+  a) Open a terminal in the project folder:
+
+        cd mc-jev-bot        (the folder you downloaded or cloned)
+
+  b) Install the libraries (skip this if the node_modules folder exists):
+
+        npm install
+
+  c) Create the settings file. Copy .env.example to .env, then edit .env:
+
+        MC_HOST=localhost
+        MC_PORT=<your-port>         <- the LAN port (changes every time, see 3)
+        BOT_NAME=Mint               <- the bot's name in the world
+        TYPESAFE_API_KEY=...        <- your Jev key
+
+     .env is private (git ignores it). Never paste your API key anywhere else.
+     Every other setting is optional and listed in section 9.
+
+
+-------------------------------------------------------------------------------
+ 3. EVERY TIME YOU WANT THE BOT TO PLAY
+-------------------------------------------------------------------------------
+
+  Step 1: Open your world in Minecraft.
+          Esc -> "Open to LAN" -> "Start LAN World".
+          The chat shows a line like:  "Local game hosted on port 12345"
+
+  Step 2: Put that port in .env:   MC_PORT=12345
+          The port is random and changes EVERY time you reopen the world.
+          A wrong port is the most common reason the bot can't join.
+
+  Step 3: Make sure the bot is not already running (never run two copies):
+
+          PowerShell:   Get-Process node -ErrorAction SilentlyContinue
+          cmd:          tasklist /FI "IMAGENAME eq node.exe"
+
+          If it shows a node process that is the bot, stop that first
+          (section 5). Two copies fight over the same account and files.
+
+  Step 4: Start the bot:
+
+          npm start          (the same thing as: node index.js)
+
+          Within a few seconds the console prints "Bot spawned", then
+          "Session started". The bot appears in your world and starts working
+          on its own. Leave the terminal window open; closing it stops the bot.
+
+  Step 5 (optional): Open the dashboard in a browser:
+
+          http://localhost:3000
+
+
+-------------------------------------------------------------------------------
+ 4. WATCHING THE BOT
+-------------------------------------------------------------------------------
+
+  Dashboard   http://localhost:3000
+              The live 3D view, health, food and air, what it is doing and why,
+              the priority board, Jev's advice, the path to a diamond kit, a
+              radar, the bag, and a story feed. BOT-GUIDE.txt section 11
+              explains every panel.
+                Keys:  1 live view   2 history   3 turn the 3D view on/off
+                       S sound on/off   Esc close the death card
+              http://localhost:3000/?overlay=1 is a see-through version for
+              OBS streaming.
+              It only works on this computer (bound to 127.0.0.1) and can only
+              watch; nothing on it controls the bot.
+
+  Status file bot-status.txt in the project folder, rewritten every second.
+              Open it in any text editor for a one-page snapshot.
+
+  In-game chat  Type these in Minecraft chat (no slash):
+                  help      list of commands
+                  status    health, food, behavior, gear
+                  report    everything at once
+                  watch 30  a full report every 30 s ("watch off" stops it)
+                  plan      the current phase and what it still needs
+                  why       what it is doing and what Jev advised
+                  hurt      what has damaged it
+                  diff      the difficulty it has worked out
+                  lag       speed and freeze figures
+                  where     its coordinates
+                  inv       inventory
+                  base      where its crafting table and furnace are
+                  come      walk to you
+                  stop      pause everything      resume   carry on
+                  cheats / xray on|off / fullbright on|off
+
+  Logs        logs\session-<date>.log, one file per run (JSON lines; times are
+              UTC, which is 5 h 30 min behind India time).
+              A readable summary of the newest log:
+
+                  npm run logs
+
+              Several logs at once:
+
+                  npm run logs -- logs\a.log logs\b.log
+
+              Read the SIGNALS lines first. Each is a bug that used to happen;
+              they should all read 0.
+
+
+-------------------------------------------------------------------------------
+ 5. STOPPING THE BOT
+-------------------------------------------------------------------------------
+
+  - Click the terminal it runs in and press Ctrl+C. It saves its memory and
+    exits cleanly. This is the right way.
+  - "stop" in Minecraft chat only PAUSES it (it stays in the world); "resume"
+    carries on.
+  - If the window is gone and the bot is still in the world:
+
+        Get-Process node          (note the Id of the bot's process)
+        Stop-Process -Id <Id>
+
+    Stop-Process -Name node also works, but it kills EVERY Node program on the
+    laptop, not just the bot.
+
+  Closing the LAN world while the bot runs does no harm: it logs
+  "Disconnected — reconnecting" and keeps retrying (every 5 s, backing off to
+  30 s) until the world is open again. If the world comes back on a NEW port,
+  stop the bot, change MC_PORT, and start it again.
+
+
+-------------------------------------------------------------------------------
+ 6. STARTING FRESH (a new world, or a clean test)
+-------------------------------------------------------------------------------
+
+  The bot remembers each world: where its table and furnace are, the deepest
+  point it reached, ore it saw, where it died, water traps, and more. It
+  recognises a different world by itself and starts clean there. To wipe the
+  memory by hand anyway, stop the bot, then run:
+
+        npm run fresh
+
+  This deletes known-base.json, world-memory.json and bot-status.txt, then
+  starts the bot. Logs and stats.json (the run history on the dashboard) are
+  kept.
+
+
+-------------------------------------------------------------------------------
+ 7. IF THE LAPTOP IS SLOW OR LOW ON MEMORY
+-------------------------------------------------------------------------------
+
+  The 3D view on the dashboard is the heaviest part, because it sends the
+  browser every chunk the bot can see.
+  - Press 3 on the dashboard (or click "3D off") to unload it.
+  - Or turn the 3D view off completely:  MC_VIEWER=off  in .env.
+  - Or show fewer chunks:  MC_VIEWER_DISTANCE=3  (the default is 4).
+  - The 3D view shows its frame rate in the corner ("3D 60 FPS").
+    MC_VIEWER_PIXEL_RATIO=1 (the default) keeps it fast; 0 draws at the
+    screen's full resolution, sharper but slower.
+  - A hidden dashboard tab pauses by itself after one minute.
+  - Close the dashboard tab when you are not watching it.
+  - "Event loop stalled ... verdict: not our code" in the log means the computer
+    ran out of memory for a moment. Close other programs.
+
+
+-------------------------------------------------------------------------------
+ 8. CHECKING THE CODE (after any change)
+-------------------------------------------------------------------------------
+
+        npx eslint .        must print nothing (no errors)
+        npm test            35 test suites, about 870 checks, all must pass
+
+  The tests need no Minecraft. test\waterSim.test.js runs Minecraft's real
+  physics engine on a pretend world to test swimming.
+
+
+-------------------------------------------------------------------------------
+ 9. ALL SETTINGS (.env)
+-------------------------------------------------------------------------------
+
+  Connection
+    MC_HOST                 world address                        localhost
+    MC_PORT                 LAN port (changes every time)        25565
+    BOT_NAME                the bot's name in the world           Mint
+    MC_EMAIL                Microsoft account (MC_AUTH=microsoft)  (none)
+    MC_VERSION              force a version, e.g. 1.21.9          auto-detect
+    MC_AUTH                 offline (LAN) or microsoft (real servers)  offline
+    MC_CONNECT_TIMEOUT_MS   how long to wait when joining        60000
+    MC_VIEW_DISTANCE        chunks the bot asks the server for   normal
+
+  Jev (TypeSafe)
+    TYPESAFE_API_KEY               your key                        (none)
+    TYPESAFE_TIMEOUT_MS            longest a request may take      4000
+    TYPESAFE_COMBAT_DEADLINE_MS    longest a fight waits for Jev   300
+    TYPESAFE_REFLEX_RANGE          closer than this, don't wait    5 blocks
+    TYPESAFE_RESOURCE_DEADLINE_MS  longest ore mining waits for Jev  400
+
+  Cheats
+    ENABLE_FULLBRIGHT   true/false. On: no torches needed to go deep.  on
+    ENABLE_XRAY         true/false. On: tunnels to ore hidden in rock. off
+    XRAY_RADIUS         how far x-ray looks, in blocks             64
+    (Both can also be switched from chat: "xray on", "fullbright off".)
+
+  Dashboard
+    MC_DASHBOARD_PORT   website port, 0 turns the website off      3000
+    MC_VIEWER           off = no 3D view (saves memory)            on
+    MC_VIEWER_DISTANCE  chunks shown in the 3D view                4
+    MC_VIEWER_PIXEL_RATIO  3D resolution; 1 is fastest, 0 = screen  1
+
+  Console
+    STATUS_INTERVAL_MS  how often a status line prints             15000
+
+
+-------------------------------------------------------------------------------
+ 10. TROUBLESHOOTING
+-------------------------------------------------------------------------------
+
+  "connect ECONNREFUSED" over and over
+      The world isn't open to LAN, or MC_PORT is wrong. Check the port in the
+      Minecraft chat, fix .env, and restart the bot.
+
+  The bot joins and leaves straight away, or is kicked for authentication
+      You are joining a real (online-mode) server. Set MC_AUTH=microsoft. The
+      console then shows a code and a web address; approve it once in a
+      browser, and later starts don't ask again.
+
+  "Dashboard could not start"
+      Port 3000 is in use (often by a second copy of the bot). Check section
+      3 step 3, or set MC_DASHBOARD_PORT to another number.
+
+  The dashboard says NO SIGNAL or RELINKING
+      The bot stopped, crashed or is reconnecting. Look at the terminal.
+      The page picks up again by itself when the bot is back.
+
+  The bot does nothing when you type in chat
+      Only the exact words in section 4 work, without a slash. While it is
+      dead and respawning it only answers "status", "report" and "where".
+
+  "Bot is NOT in survival mode — blocks will not drop items"
+      Blocks drop nothing in creative. Put the bot in survival:
+      /gamemode survival Mint      (use the bot's name)
+
+  It keeps walking to a crafting table that isn't there
+      Its memory is from a different world with the same spawn point. Run
+      "npm run fresh" (section 6).
+
+  Two bots, or odd fighting over controls
+      Two copies are running. Stop them all (section 5) and start one.

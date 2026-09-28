@@ -1,0 +1,632 @@
+===============================================================================
+  THE BOT, EXPLAINED  (mc-jev-bot; the bot is called "Mint" by default)
+===============================================================================
+
+Everything about what the bot does, how it decides, what it remembers, what the
+website shows, and where each piece lives in the code. To start and stop it,
+see HOW-TO-RUN.txt.
+
+CONTENTS
+   1. What the bot is
+   2. The goal and the eight phases
+   3. How it decides what to do (the director)
+   4. Every behavior, by priority
+   5. Jev: where the AI model is used
+   6. Staying alive: fights, night, food, hazards
+   7. Water and swimming
+   8. Gathering, crafting and smelting
+   9. Mining and going deep
+  10. What it remembers (files it writes)
+  11. The dashboard website
+  12. In-game chat commands
+  13. Logs and the log summary
+  14. Settings and cheats
+  15. Tests
+  16. Where everything is in the code
+  17. Known limits
+
+
+===============================================================================
+ 1. WHAT THE BOT IS
+===============================================================================
+
+A Minecraft survival bot for Java Edition 1.21.9. It joins a LAN world as a
+normal player named Mint (change it with BOT_NAME in .env) and plays survival by itself, from empty hands to a
+full diamond kit (diamond pickaxe, sword, helmet, chestplate, leggings and
+boots). Nobody steers it.
+
+It is built on:
+  - Mineflayer, a JavaScript library that plays as a Minecraft client;
+  - mineflayer-pathfinder for walking routes;
+  - plugins for combat (custom-pvp), finding who hit it (bloodhound), picking
+    tools (tool), wearing armour (armor-manager) and eating (auto-eat);
+  - Jev from TypeSafe, a fast AI model that answers typed questions with a
+    confidence score. It is used only for real judgement calls (section 5).
+
+The rule it is built on: anything that has one right answer (walking to a tree,
+crafting a pickaxe, loading a furnace) is ordinary code. Jev is asked only where
+the answer depends on judgement, such as whether to fight a mob.
+
+
+===============================================================================
+ 2. THE GOAL AND THE EIGHT PHASES
+===============================================================================
+
+The bot works through a fixed list of phases (src/progression.js). Each has a
+"done" test, and it moves on when that test passes. Some also have a looser
+"kept" test so the bot does not slip back a phase the moment it spends one
+item. Example: eating its sixth steak underground does not send it back to the
+surface for food.
+
+   #  Phase          Done when                                    Numbers from
+   1  Wood           32 planks' worth of wood (a log counts as 4)   the trip's needs
+   2  Stone tools    stone (or better) pickaxe, sword and axe       gear.js
+   3  Food           6 pieces of food in the bag                    the trip's needs
+   4  Ready to dig   everything the deep trip needs: food, wood,    mine.js
+                     40 blocks to place, a working pickaxe, a
+                     weapon
+   5  Iron           all the iron the iron kit still needs is mined gear.js
+   6  Iron kit       iron pickaxe, sword and armour made            gear.js
+   7  Diamonds       29 diamonds collected or already crafted       mine.js
+   8  Diamond kit    all six diamond pieces made                    progression.js
+
+Wood first, then the full stone kit, then food, is the order you asked for.
+Hunting needs a stone (or better) weapon, unless food is down to 6 or below.
+
+Each number is stored once and reused everywhere. For example, the wood target
+IS the deep trip's plank requirement, not a copy of it. When two copies of a
+number drifted apart, the bot used to gather too little and stall.
+
+What may skip a phase:
+  - anything that keeps the bot alive (priority 50 and up) is never held back;
+  - upkeep always runs: picking up drops, cooking, crafting what it can craft
+    now, keeping some wood, climbing out for supplies;
+  - a "cheap win" can be taken out of order: ore it needs, or an animal,
+    within 6 blocks.
+Nothing else skips a phase.
+
+
+===============================================================================
+ 3. HOW IT DECIDES WHAT TO DO (THE DIRECTOR)
+===============================================================================
+
+One scheduler, src/director.js, owns the body. Only one behavior runs at a time.
+
+  - Every behavior has a priority number and a shouldRun() test.
+  - The director runs the highest-priority behavior whose shouldRun() is true.
+  - A behavior does one small piece of work (chop one log, craft one item, win
+    one fight) and returns. Then the director chooses again. This keeps it
+    reacting to change all the time.
+  - Interrupting: behaviors at priority 50 and above can cut into a running
+    one. The running behavior is stopped through a cancel token.
+  - Staying on task: the behavior that just did real work gets a small bonus
+    for 10 seconds, so the bot finishes jobs instead of flicking between two
+    similar ones. The bonus never lets routine work block an emergency.
+  - No-op backoff: a behavior that is picked but keeps achieving nothing is
+    put on hold for a while, so it cannot hog the bot. "idle" is exempt.
+  - Time limit: a behavior that runs over 60 seconds is stopped.
+  - All walking goes through src/nav.js, which keeps one active route and
+    always releases the movement keys afterwards. A stuck "forward" key once
+    made the bot look like it was flying.
+
+Two layers sit next to the director (src/layers/):
+  - Reflex layer: checks lava, drowning, a hostile within 3 blocks, low health
+    and a big drop on EVERY game tick (20 times a second). When one fires it
+    tells the director at once. It can also place a block under the bot's feet
+    when it is about to fall into a deep hole.
+  - State machine: labels what the bot is doing (idle, gathering, mining,
+    crafting, fighting, fleeing) for the status line and the dashboard. It only
+    watches; it does not steer.
+
+
+===============================================================================
+ 4. EVERY BEHAVIOR, BY PRIORITY
+===============================================================================
+
+ Pri  Name            What it does
+ ---  --------------  --------------------------------------------------------
+  97  escapeHazard    Out of lava or fire, NOW. Above everything: lava does 4
+                      damage every half second.
+  95  escapeDrowning  Low on air, or under a ceiling underwater: go to the
+                      nearest air by route, or dig to it if that fits the air
+                      left (section 7).
+  94  defend          Hit back at whatever is hitting it, even mid-task. Gives
+                      way to shelter when digging in will work.
+  93  unstick         Hasn't moved for a while and is boxed in: builds a pillar
+                      or cuts steps upward to get out. Stands aside in water.
+  92  bed             Night, and it has or can make a bed: sleeps, which skips
+                      the night and sets the respawn point.
+  91  shelter         Night, swarmed, no bed, not armed well enough: digs down,
+                      seals the roof and waits for morning. Won't dig in with a
+                      mob right beside it, or next to water.
+  88  threat          A hostile that hurt it or is within about 6 blocks, or
+                      something shooting at it with a clear line: fight, flee
+                      or ignore (Jev decides; section 5).
+  85  leaveWater      Stuck in water: gets out by the list in section 7.
+  60  loot            It died recently and its dropped items can still be
+                      reached before they despawn (5 minutes): goes back.
+  48  fetchCooked     Food is ready in a furnace or smoker nearby: collects it.
+  47  woodUrgent      Almost no wood: gets some now, even over food, because
+                      nothing else can be crafted without it.
+  46  forage          Hungry, with no food: picks ripe crops and berries in
+                      view, or keeps one heading into new ground to find
+                      animals, avoiding places already searched.
+  45  huntUrgent      Actually starving and an animal is close: hunts it.
+  44  collect         Dropped items within 16 blocks: picks them up.
+  43  resupply        Underground and genuinely out of food or wood: climbs
+                      back up. It won't climb 40 blocks for a single plank.
+  42  valuables       Diamond, or iron the kit still needs, in plain view:
+                      goes and mines it before anything carries it away.
+  40  gear            Crafts the next upgrade it can afford: tools, a backup
+                      pickaxe, armour, shield, torches. Treats a tool below 15%
+                      durability as already gone.
+  38  smelt           Loads a furnace, smoker or blast furnace and leaves. Food
+                      comes first when nothing cooked is left. Uses the
+                      cheapest fuel first and keeps coal for last.
+  34  forageTopUp     Stocks food up for the deep trip.
+  31  hunt            Food is low and an animal is near: hunts it (not
+                      bare-fisted).
+  30  tidy            Bag clogged with junk: drops it, but always keeps a stack
+                      of placeable blocks for pillars and roofs.
+  28  gatherStone     Below 40 cobblestone: mines exposed stone that has solid
+                      ground under it, so the drop can be picked up.
+  25  mine            Ore in sight and a good enough pickaxe: Jev decides mine
+                      or skip.
+  24  goDeep          At the wrong height for what it needs: digs a staircase
+                      down to the right depth.
+  23  stripMine       At the right depth: digs 12-block tunnels and explores
+                      caves for ore.
+  10  wood            Below the wood target: chops trees, at the base of the
+                      trunk.
+   5  explore         Nothing to do nearby: walks to new ground.
+   1  idle            Last resort: walks somewhere new, so work comes back
+                      within range.
+
+Eating is not in this list. The auto-eat plugin handles it on its own timer, so
+the bot eats while walking or fighting (section 6).
+
+
+===============================================================================
+ 5. JEV: WHERE THE AI MODEL IS USED
+===============================================================================
+
+Jev is asked three kinds of question (src/jevClient.js):
+
+  1. Threat: fight, flee or ignore this mob? It is told health, hunger,
+     weapon, armour, how many hostiles are around, whether the mob can be
+     outrun, and whether it shoots.
+  2. Ore: is this ore worth the detour, given what is already in the bag?
+  3. Strategy: which need to focus on now (food, tools, mining ...). If the
+     answer is at least 35% confident, the matching behaviors get a boost for
+     30 seconds. The dashboard shows whether that advice was applied.
+
+The bot never waits on Jev:
+  - Jev answers in about 0.3 to 3.6 seconds, but reflexes must happen in
+    milliseconds. So src/prefetch.js asks early: every hostile in range and
+    every ore type in view gets its question sent while the bot is still
+    walking there. The answer is usually waiting when needed.
+  - Every question has a deadline: 300 ms for a fight, 400 ms for ore, and 0
+    for a mob within 5 blocks or right after being hit. If Jev hasn't answered
+    by then, a built-in "instinct" rule decides. The late answer is still
+    saved and used next time.
+  - An answer below 35% confidence counts as no answer, and instinct decides.
+  - A request that times out during a laptop freeze is marked "during a
+    stall", so it isn't blamed on Jev.
+  - The dashboard and the "Jev" status line show how many decisions Jev made
+    versus instinct, and the success rate.
+
+
+===============================================================================
+ 6. STAYING ALIVE: FIGHTS, NIGHT, FOOD, HAZARDS
+===============================================================================
+
+FIGHTING (behaviors/threat.js, src/tactics.js, src/combat.js)
+  - It defends; it doesn't hunt mobs for fun. It reacts to what hurt it, what
+    is on top of it, or what shoots at it with a clear line. Everything else is
+    ignored while it works.
+  - Mob-specific tactics:
+      zombies, husks, drowned: builds up 2 blocks and hits down;
+      skeletons and other archers: with a bow, uses cover and peeks out to
+        shoot; without one, closes in fast (running away just gives them free
+        shots);
+      creepers: never hit. It walks away every time;
+      bosses (wither, warden, ender dragon, elder guardian, ravager, evoker):
+        never targets; it only leaves;
+      everything else: hits from the edge of its reach, where most mobs can't
+        hit back.
+  - Switches target mid-fight to a creeper within 6 blocks, or to whatever
+    starts hitting it.
+  - Stops chasing 18 blocks from where the fight began.
+  - Holds off on mobs it can't reach, for longer each time.
+  - Flees only from what it can outrun and what doesn't shoot. It knows which
+    mobs those are.
+  - Works out the world's difficulty from how hard mobs hit (src/difficulty.js).
+    Until it has seen enough hits it assumes Hard, the safe guess. "diff" in
+    chat shows the result.
+  - Watches damage and names its source (src/damage.js). The dashboard and
+    the log show damage for this life and for the whole session.
+
+NIGHT
+  - bed (92): sleeps when it can. Wool comes from sheep it hunts anyway.
+  - shelter (91): with no bed and not strong enough, it digs in and seals the
+    roof. It takes its crafting table with it only when it can see it, and
+    checks the table actually reached the bag.
+
+FOOD (src/eating.js, auto-eat plugin)
+  - Eats whenever there is health to heal, so hunger stays at 18 or more and
+    health regenerates. Saves food when already at full health.
+  - Raw meat is banned while there is cooked food; raw is allowed only below
+    10 hunger with nothing better. Poison and golden apples are never eaten
+    automatically.
+  - Rotten flesh is the last resort: eaten only at 6 hunger or less with
+    nothing else in the bag, because it is better than starving to death.
+    It keeps up to 8 for that reason.
+  - Also eats carrots, potatoes, beetroot, berries, melon and apples, and
+    picks ripe crops, berry bushes and melons while searching for food.
+  - Cooks in a smoker (twice as fast) when it can build one.
+  - Stops hunting once 3 raw pieces are waiting for the furnace.
+  - Auto-eat is paused while it places blocks, crafts, or escapes lava or
+    drowning, so food can't be swapped into its hand at the wrong moment.
+
+HAZARDS (src/lava.js, src/falls.js, src/layers/reflex.js)
+  - Never digs a block that has lava on any of its six sides.
+  - Every manual step refuses lava at foot, head or floor level, and any drop
+    deeper than 4 blocks.
+  - Pathfinder uses the same 4-block drop limit. Water counts as a safe
+    landing only within that same limit, so it doesn't jump into deep water
+    from high up.
+  - Never digs out from under sand or gravel.
+  - Places a block underfoot when it is about to fall into a deep hole.
+
+DEATH AND LOOT (behaviors/loot.js)
+  - After respawning it walks back for its items, in 40-block legs, but only
+    when it can get there before the 5-minute despawn.
+  - The log line "Bot died" records the cause and the damage taken in that
+    life.
+
+
+===============================================================================
+ 7. WATER AND SWIMMING  (src/water.js, behaviors/survive.js)
+===============================================================================
+
+All of this is based on Minecraft's physics, measured in a simulation:
+  - In water only the facing direction steers. Looking up or down, sprinting
+    and sneaking do nothing useful.
+  - Holding jump rises (up to 3.5 blocks/s). With no input the bot sinks
+    slowly (0.5 blocks/s).
+  - It can climb out onto a bank at most 1 block above the water's surface. A
+    bank 2 blocks up can never be climbed.
+  - It cannot build a pillar while floating: it bobs up and down too much.
+  - Digging underwater is very slow: stone with a stone pickaxe takes 14 s
+    floating, 2.85 s standing on the bottom, 0.6 s on dry land.
+
+The swimming controller ("pilot") takes over the movement keys whenever the bot
+is in water, and updates them 20 times a second:
+  - When nothing else is steering, it holds jump so the bot's head stays above
+    water. The exception is a deliberate dive with enough air.
+  - It follows planned routes: along the surface to the shore, or in 3D to the
+    nearest air.
+  - It climbs out: faces the bank and holds forward and jump until it is
+    standing on dry ground.
+
+ESCAPE DROWNING (95)
+  - Starts when air is low (8 bubbles or fewer out of 20), or at once when the
+    bot is under a ceiling, where waiting would only waste air.
+  - Takes the swim route to air when it fits the air left, with 50% spare.
+  - Otherwise digs up toward air if the dig time fits. It sinks to the bottom
+    first when digging from there is faster, and never digs under sand or
+    gravel.
+  - If neither fits, it still goes for the nearest air rather than waiting.
+
+LEAVE WATER (85). Tries these in order:
+  1. Under the surface or under a ceiling: swims up and out first.
+  2. Swims to a bank it can actually climb (up to 40 blocks away) and climbs
+     out.
+  3. No climbable bank, as in a ravine: places a block against the wall,
+     climbs onto it, builds up to the top, then steps off onto the edge.
+  4. No blocks: cuts steps into the wall with the pickaxe.
+  5. Otherwise keeps swimming, or holds at the surface, and tries again. It
+     never just stands still.
+
+STAYING OUT
+  - A ravine it had to build its way out of is remembered as a "water trap"
+    (up to 10 per world). Routes through it are made expensive, and trees,
+    drops and animals inside it are ignored.
+  - "unstick" and "shelter" leave water to leaveWater. They used to fight it
+    for control.
+  - Going back into water within 30 s of getting out logs "Re-entered water",
+    with the behavior that caused it.
+
+
+===============================================================================
+ 8. GATHERING, CRAFTING AND SMELTING
+===============================================================================
+
+  - Wood: searches 16, then 32, then 48 blocks. Remembers trees it couldn't
+    reach and chops from the base of the trunk.
+  - Stone: aims for 40 cobblestone. Only takes stone whose drop it can pick
+    up (not stone inside a wall or on a cave ceiling). Granite, diorite,
+    andesite and tuff don't count, because they don't drop cobblestone.
+  - Pickups: stands close enough (about 2.4 blocks) that drops land at its
+    feet, and walks to where a drop actually fell.
+  - Crafting (behaviors/gear.js): wooden tools, then stone, iron and diamond;
+    a backup pickaxe once the current one is half worn; armour; a shield;
+    torches when fullbright is off. When a craft fails, the log says why: not
+    enough planks or sticks, not enough material, or interrupted.
+  - Stations (src/stations.js): places a crafting table and furnace when
+    needed and reuses one within 8 blocks. It gives up on a station only
+    after 3 failed trips there.
+  - Smelting (behaviors/smelt.js): picks the furnace, smoker (food) or blast
+    furnace (ore), loads it, and leaves. A later visit collects the result.
+    Fuel is sized to the job, cheapest first, coal last.
+
+
+===============================================================================
+ 9. MINING AND GOING DEEP  (behaviors/mine.js)
+===============================================================================
+
+Ore sits at particular heights, so the bot mines where it actually is:
+
+   Ore                Best height (Y)   Worth mining between
+   Diamond, redstone        -59              -64 ... 14
+   Gold                     -16              -64 ... 32
+   Lapis                      0              -32 ... 32
+   Iron                      16              -24 ... 56
+   Copper                    48              -16 ... 112
+   Coal                      96                0 ... 190
+
+  - goDeep: digs a staircase down to the right height. It won't go for
+    diamonds without an iron pickaxe (stone breaks diamond ore for nothing).
+  - stripMine: 12-block tunnels, plus caves nearby (it leaves a cave once
+    it has been searched or is crowded with mobs).
+  - It mines the whole vein once it finds one.
+  - It skips ore more than 2 blocks above it (that caused an up-down loop).
+  - Before going deep it needs the whole trip kit (phase 4). Once
+    underground it climbs back up only when it is truly out of food or wood.
+  - X-ray is off by default: it only mines ore it could really see (an
+    exposed face, or one its own tunnels uncover). Section 14.
+  - Night shift: once sealed into its night shelter it keeps digging its
+    staircase down toward the ore it needs, instead of waiting for dawn.
+    When the staircase is refused at a spot (for example boxed in by water),
+    it doesn't try again within 2 blocks of that spot. It used to retry 256
+    times.
+
+
+===============================================================================
+ 10. WHAT IT REMEMBERS (FILES IT WRITES)
+===============================================================================
+
+  known-base.json     Where its crafting table and furnace are, and which
+                      world it is in (worked out from the host and spawn
+                      point).
+  world-memory.json   A notebook for each world: the deepest point reached,
+                      ore it has seen, where it died, structures, when it
+                      last slept, and water traps. A different world gets a
+                      fresh notebook automatically.
+  stats.json          History across worlds and attempts: how long each
+                      milestone took, deaths by cause, the leaderboard. Shown
+                      on the dashboard's History tab. "npm run stats" rebuilds
+                      it from every log.
+  bot-status.txt      A one-page snapshot, rewritten every second.
+  logs\session-*.log  Everything that happened, one file per run.
+
+"npm run fresh" deletes the first two and bot-status.txt, then starts the bot.
+
+
+===============================================================================
+ 11. THE DASHBOARD WEBSITE  (http://localhost:3000)
+===============================================================================
+
+It can only watch (nothing on it controls the bot), and only this computer can
+open it.
+
+LIVE VIEW (key 1)
+  - 3D feed: the world as the bot sees it, with its planned route and the
+    block it is digging drawn in. Buttons: ORBIT, BOT'S EYES, 3D OFF (key 3).
+    The view reloads by itself after a respawn or reconnect. Its frame rate
+    shows in the corner. It draws at a capped resolution
+    (MC_VIEWER_PIXEL_RATIO, default 1) and runs in its own browser process,
+    so the rest of the page can't slow it down.
+  - Top bar: health, food, air, time of day, ping, Jev success rate, freeze
+    count, and a LIVE / RELINKING / NO SIGNAL light. If no update arrives for
+    2 seconds the page dims, so old data never looks live.
+  - Chips over the 3D view: what it is doing, nearby threats, and the water
+    state (in water, surfacing for air, climbing out, building a landing,
+    pillaring out).
+  - PROGRESSION: the 8 phases, the current one, and an estimated time.
+    SUPPLIES underneath shows have/need for wood, cobblestone, food, coal,
+    iron and diamonds.
+  - SPLITS: how long each phase took this life.
+  - RADAR: mobs, animals and players within 32 blocks, the bot's trail, death
+    spots with their cause, and water traps.
+  - BACKPACK: the inventory with item icons.
+  - DECISION STREAM: a story feed of what just happened, with filters. Water
+    and air events are included.
+  - BRAIN: every behavior the director is weighing, its effective priority
+    (boosted ones are marked), and whether it wants to run, is blocked, or
+    threw an error.
+  - JEV: recent decisions, focus advice and whether it was applied, and calls,
+    failures and failures during freezes for each kind of question.
+  - Death card: when the bot dies, a replay of its last 10 seconds.
+    Esc closes it.
+  - Toasts and optional sounds (key S) for big moments.
+
+HISTORY VIEW (key 2)
+  "How good is the bot?": a milestone funnel from a fresh start, a world
+  leaderboard, deaths by cause, and the time to a stone pickaxe for each
+  fresh life.
+
+OTHER
+  - /?overlay=1 : a see-through heads-up display for OBS. No death card.
+  - The "keys" checkbox turns the single-key shortcuts off.
+  - A hidden tab stops streaming after 1 minute, to save the computer's memory,
+    and catches up without duplicates when shown again.
+  - Built for screen readers: labels, dialog focus, and readable contrast.
+
+
+===============================================================================
+ 12. IN-GAME CHAT COMMANDS  (type in Minecraft chat, no slash)
+===============================================================================
+
+  help               the list below
+  status             health, food, current behavior, gear, what is nearby
+  report / all / full  everything at once
+  watch [seconds]    a full report every N seconds; "watch off" stops
+  plan / goal        current phase and what it still needs
+  why                what it is doing and Jev's current advice
+  hurt / damage      what has damaged it
+  diff / difficulty  the difficulty it has worked out, and how sure it is
+  lag / speed        freezes, ping, memory
+  where              coordinates
+  inv                inventory
+  base               where its table and furnace are
+  come               walks to you
+  stop / resume      pause and unpause everything
+  cheats             whether x-ray and fullbright are on
+  xray on|off        switch x-ray
+  fullbright on|off  switch fullbright
+
+A command that fails replies "that command errored: ..." rather than going
+quiet. While dead it answers only status, report and where.
+
+
+===============================================================================
+ 13. LOGS AND THE LOG SUMMARY
+===============================================================================
+
+Each run writes logs\session-<start time>.log: one JSON line per event, with
+the time in UTC (India is 5 h 30 min ahead). "npm run logs" summarises the
+newest one:
+
+  SIGNALS   bugs that used to happen, counted. They should all be 0. Water
+            rows: back in water within 30 s, unstick straight after water,
+            leaveWater giving up within 1 s, pillar attempts in water,
+            drownings and drowning damage.
+  NIGHTS    what it did at night: legs mined, crafts, reasons for not mining.
+  PHASES    phases finished and how long each took.
+  JEV       decided by Jev, by instinct, answered in advance, failures (and how
+            many were during freezes).
+  STALLS    moments the program froze for over 400 ms. "not our code" means
+            the computer was out of memory.
+  FAILED / BACKOFF / OVERRUN   what failed, what was put on hold, what ran
+            too long.
+  AVOIDABLE DAMAGE and DEATHS   what hurt it and what killed it.
+
+Useful log lines to search for:
+  "Bot died", "Stuck in water — getting out", "Reached dry land",
+  "Built a landing in the water", "Climbed out of the water",
+  "Re-entered water", "Running out of air — surfacing", "Breathing again",
+  "Engaging", "Fleeing", "Event loop stalled", "Chat command failed".
+
+
+===============================================================================
+ 14. SETTINGS AND CHEATS
+===============================================================================
+
+All settings live in .env; the full list is in HOW-TO-RUN.txt section 9.
+
+FULLBRIGHT (on by default)
+  A bot has no screen, so it could always "see" in the dark. What fullbright
+  changes is that it no longer needs torches before going deep. Without it the
+  bot must first find coal and craft torches.
+
+XRAY (off by default, and it really is a cheat)
+  The bot can read every block in loaded chunks, including ore hidden in
+  rock. With x-ray off it only mines ore a player could see. With it on it
+  tunnels straight to hidden ore up to XRAY_RADIUS blocks away. Every lava
+  and fall check still applies.
+
+Both can be switched in chat while it runs. The current setting is printed at
+startup.
+
+
+===============================================================================
+ 15. TESTS
+===============================================================================
+
+  npm test      35 suites, about 870 checks. No Minecraft needed.
+  npx eslint .  code style and mistakes; must be clean.
+
+Some of what they cover:
+  - every module loads, and every behavior works on an empty bot;
+  - mob types, tool choice, eating rules, lava, falls, staircases;
+  - the whole path from empty hands to a diamond kit, so a stuck threshold
+    fails a test instead of wasting an hour of play;
+  - thresholds that have to match each other are checked against each other;
+  - the log summary, the dashboard stream, Jev, stats, the freeze detector;
+  - waterSim: Minecraft's real physics on a pretend world
+    (test/simbot.js). The water escapes are replayed from real incidents:
+    the lake, the pool with one climbable bank, the drowning air pockets, the
+    sealed pocket, and the ravine climb to y=78.
+
+
+===============================================================================
+ 16. WHERE EVERYTHING IS IN THE CODE
+===============================================================================
+
+  index.js              wiring, reconnects, shutdown, the list of behaviors
+  fresh-start.js        "npm run fresh"
+  src/config.js         every setting and its default
+  src/bot.js            creates the bot, loads plugins, pathfinder settings
+  src/director.js       the scheduler (section 3)
+  src/progression.js    the eight phases (section 2)
+  src/behaviors/        one file per group of behaviors (section 4):
+                        survive (hazard, drowning, water), threat (threat,
+                        defend), unstick, bed, shelter, loot, smelt, hunt,
+                        collect, mine, gear, tidy, wood, explore
+  src/layers/           reflex layer and state machine
+  src/water.js          water physics, routes, the swimming pilot
+  src/swim.js           older swimming functions, now passed to water.js;
+                        air tracking
+  src/nav.js            walking, manual steps, safe step checks
+  src/tactics.js        fight moves by mob type
+  src/combat.js         combat plugin glue
+  src/jevClient.js      questions to Jev; statistics
+  src/prefetch.js       asks Jev ahead of time
+  src/eating.js         food rules; pausing auto-eat
+  src/inventory.js      counting, equipping, placing, crafting
+  src/stations.js       crafting table and furnace placement
+  src/tools.js          which tool breaks which block
+  src/entities.js       mob types; which mobs can be outrun
+  src/knowledge.js      mob damage and other game facts
+  src/difficulty.js     works out the world's difficulty
+  src/damage.js         damage tracking for each life and the session
+  src/lava.js, falls.js lava and fall safety
+  src/blocks.js         fast block searches
+  src/memory.js         world-memory.json
+  src/base.js           known-base.json, recognising which world it is in
+  src/stats.js          stats.json
+  src/statusFile.js     bot-status.txt and the dashboard's status data
+  src/dashboard.js      the web server behind the dashboard
+  src/viewerTranslate.js  converts 1.21.9 chunks for the 3D viewer (1.21.4)
+  src/lag.js            freeze detector
+  src/leakguard.js      stops plugins leaking event listeners (a leak once
+                        crashed the bot out of memory)
+  src/logger.js         session logs
+  src/chatCommands.js   chat commands
+  dashboard/            the website (index.html, style.css, js/)
+  tools/summarize-logs.js  "npm run logs"
+  tools/backfill-stats.js  "npm run stats"
+  test/                 the tests
+  README.md             overview and quick start
+  docs/DESIGN-NOTES.md  design decisions and every major bug found and fixed
+  CREDITS.md            the projects this is built on, and their licenses
+  LICENSE               MIT
+
+
+===============================================================================
+ 17. KNOWN LIMITS
+===============================================================================
+
+  - It still dies sometimes, mostly to skeletons' arrows and to melee at night.
+  - Swimming and water escapes are tested against real game physics in
+    test/waterSim.test.js. Check "npm run logs" after a session near water.
+  - On a laptop with little free memory the bot can freeze for a moment
+    ("Event loop stalled ... not our code" in the log). Turning the 3D view
+    off helps the most.
+  - Pathfinder cannot plan routes through water, so the bot's own water code
+    does that.
+  - Offline LAN worlds don't load skins, so the bot looks like a default
+    player.
+  - Tested on Minecraft 1.21.9 only.
+  - Priorities are set in code, not in a settings file.

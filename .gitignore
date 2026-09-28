@@ -1,0 +1,17 @@
+node_modules/
+.env
+logs/
+*.log
+
+# Runtime state written by the bot while it plays
+bot-status.txt
+world-memory.json
+known-base.json
+stats.json
+*.tmp
+
+# Editor and tool folders
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
