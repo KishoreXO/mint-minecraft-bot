@@ -21,6 +21,10 @@ see [CREDITS.md](CREDITS.md).
 
 ## What's new in 1.0.1
 
+- **Live dashboard:** a 3D view, status, phases, decisions, a radar, the backpack and run history,
+  at <http://localhost:3000> (see [The dashboard](#the-dashboard)).
+- **Test suite, log tools and design notes:** `npm test`, `npm run logs` and
+  [docs/DESIGN-NOTES.md](docs/DESIGN-NOTES.md).
 - **Hunting no longer gets stuck on one animal.** Before, a hunt that ran out of time without a
   kill could pick the same animal straight away, again and again. It was seen live: eleven hunts in
   a row of one rabbit while the food bar fell from 18 to 4. Now an animal that two hunts could not

@@ -2,6 +2,18 @@
 
 ## 1.0.1 (2026-10-02)
 
+### New
+- **Live dashboard** (`dashboard/`) at <http://localhost:3000> while the bot runs:
+  - a 3D view through the bot's eyes, or orbiting it, with its route and the block it is digging;
+  - status, phases with a supplies checklist, the scheduler's board, Jev decisions, a decision
+    stream, a death replay, a radar, the backpack and run history;
+  - draws at a capped pixel ratio (`MC_VIEWER_PIXEL_RATIO`), in its own browser process, with a
+    frame-rate readout;
+  - pauses itself when the tab is hidden; dims and says so when the bot stops sending data.
+- **Test suite** (`test/`): 35 suites and 874 checks, run with `npm test`; no Minecraft needed.
+- **Tools** (`tools/`): `npm run logs` summarises a play session (deaths, nights, phases, signals).
+- **Design notes** (`docs/DESIGN-NOTES.md`): the design decisions and the bugs that shaped them.
+
 ### Fixes
 - A hunt that runs out of time without killing its animal no longer picks the same animal again.
   Seen live: eleven hunts in a row of one rabbit, each ending without a kill, while the food bar
@@ -28,15 +40,6 @@
   - picks ripe crops, berries and melons;
   - eats rotten flesh only as a last resort instead of starving.
 - The bot's name is one setting, `BOT_NAME`, default **Mint**.
-
-### Dashboard
-- Live 3D view, status, phases with a supplies checklist, the scheduler's board, Jev decisions, a
-  decision stream, a death replay, a radar, the backpack and run history.
-- The 3D view is faster:
-  - it draws at a capped pixel ratio (`MC_VIEWER_PIXEL_RATIO`);
-  - it runs in its own browser process, so the rest of the page no longer slows it down;
-  - it shows its frame rate.
-- Pauses itself when the tab is hidden; dims and says so when the bot stops sending data.
 
 ### Fixes in this release
 - `npm test` could stop part-way: a helper crashed after the mining suite had passed. It now runs
