@@ -159,8 +159,10 @@ function needsFoodUrgently(bot) {
  * for a particular animal, they only choose among what is already standing
  * in front of it.
  */
-function pickPrey(bot) {
+function pickPrey(bot, ctx = {}) {
   const armed = !!(bestToolOfType(bot, 'sword') || bestToolOfType(bot, 'axe'));
+  // Not an animal we just failed to kill (noteFailedKill), or could not reach.
+  const prey = (e) => huntable(bot)(e) && chaseable(ctx)(e);
 
   // UNARMED: take whatever dies fastest.
   //
@@ -170,7 +172,7 @@ function pickPrey(bot) {
   // in one minute, no meat, and the hunger bar still falling. When we have
   // nothing, the cheapest kill is the only kill.
   if (!armed) {
-    const reachable = nearbyPrey(bot);
+    const reachable = nearbyPrey(bot, prey);
     if (reachable.length === 0) return null;
     // Health first, then distance. Without the tie-break two chickens twenty
     // blocks apart were indistinguishable, and the bot would just as happily
@@ -184,7 +186,7 @@ function pickPrey(bot) {
   // three wool skips an entire night. Opportunism only — it never sends the
   // bot looking, it just breaks the tie among animals already in range.
   if (wantsWool(bot)) {
-    const sheep = nearestWithin(bot, (e) => e.name === 'sheep' && huntable(bot)(e), HUNT_RANGE);
+    const sheep = nearestWithin(bot, (e) => e.name === 'sheep' && prey(e), HUNT_RANGE);
     if (sheep) {
       // Worth saying out loud when the clock is running: phantoms start at
       // three days awake and a bed is the only thing that stops them.
@@ -195,15 +197,15 @@ function pickPrey(bot) {
       return sheep;
     }
   }
-  return nearestWithin(bot, huntable(bot), HUNT_RANGE);
+  return nearestWithin(bot, prey, HUNT_RANGE);
 }
 
-/** Every food animal within hunting range. */
-function nearbyPrey(bot) {
+/** Every food animal within hunting range that `prey` accepts. */
+function nearbyPrey(bot, prey = huntable(bot)) {
   const out = [];
   for (const id of Object.keys(bot.entities)) {
     const e = bot.entities[id];
-    if (!huntable(bot)(e)) continue;
+    if (!prey(e)) continue;
     if (bot.entity.position.distanceTo(e.position) <= HUNT_RANGE) out.push(e);
   }
   return out;
@@ -213,7 +215,7 @@ async function doHunt(bot, ctx, task) {
   // Both callers' shouldRun already checked; this is the one place that
   // swings at an animal, so the rule is held here too.
   if (!mayHunt(bot)) return false;
-  const animal = pickPrey(bot);
+  const animal = pickPrey(bot, ctx);
   if (!animal) return false;
 
   // Bare hands are fine for SOME animals, and refusing outright was costing
@@ -267,6 +269,11 @@ async function doHunt(bot, ctx, task) {
   }
 
   const killed = !animal.isValid;
+  // A rabbit that outran the timeout is still there, still nearest, and was
+  // picked again: 08:43–08:47 on 10-02, eleven "Hunting {rabbit}" in a row,
+  // each "Hunt finished {killed: false}" after ~24 s, while food went 18 -> 4.
+  if (killed) chaseMemory(ctx).strikes.delete(animal.id);
+  else if (animal.isValid) noteFailedKill(ctx, animal);
 
   // Walk over the drops so they get picked up. `collect` sweeps up anything
   // that scattered further than this.
@@ -569,6 +576,22 @@ function noteChase(ctx, animal, before, after) {
     memory.strikes.delete(animal.id);
     return;
   }
+  strike(ctx, animal, 'Cannot get any closer to that animal — looking elsewhere', {
+    distance: after === null ? 'gone' : Math.round(after),
+  });
+}
+
+/**
+ * A hunt that ran out of time with the animal still alive. Same memory and
+ * same two strikes as a chase that gets nowhere: either way, that animal is
+ * not dinner, and the next hunt should be after a different one.
+ */
+function noteFailedKill(ctx, animal) {
+  strike(ctx, animal, 'Could not kill that animal — hunting a different one');
+}
+
+function strike(ctx, animal, message, details = {}) {
+  const memory = chaseMemory(ctx);
   const strikes = (memory.strikes.get(animal.id) ?? 0) + 1;
   if (strikes < CHASE_STRIKES) {
     memory.strikes.set(animal.id, strikes);
@@ -576,9 +599,9 @@ function noteChase(ctx, animal, before, after) {
   }
   memory.strikes.delete(animal.id);
   memory.ignoredUntil.set(animal.id, Date.now() + CHASE_IGNORE_MS);
-  logger.info('Cannot get any closer to that animal — looking elsewhere', {
+  logger.info(message, {
     animal: animal.name,
-    distance: after === null ? 'gone' : Math.round(after),
+    ...details,
     ignoringForSec: CHASE_IGNORE_MS / 1000,
   });
 }
@@ -769,7 +792,7 @@ module.exports = {
   forageTopUp,
   // For the tests: which larder counts as an emergency decides what outranks
   // toolmaking, and the chase memory decides whether one cow can eat a night.
-  larderEmergency, larderShortForTrip, noteChase, chaseable,
+  larderEmergency, larderShortForTrip, noteChase, noteFailedKill, chaseable, pickPrey,
   // For test/thresholds.test.js: both of these have to stay at or above the
   // descent's food requirement or the bot hunts to one meal short of a trip it
   // is otherwise ready for, forever.

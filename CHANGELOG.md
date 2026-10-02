@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 (2026-10-02)
+
+### Fixes
+- A hunt that runs out of time without killing its animal no longer picks the same animal again.
+  Seen live: eleven hunts in a row of one rabbit, each ending without a kill, while the food bar
+  went from 18 to 4. After two failed kills an animal is now left alone for three minutes and the
+  bot hunts a different one.
+
 ## 1.0.0 (2026-09-28): first public release
 
 ### The bot

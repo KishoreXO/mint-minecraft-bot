@@ -19,6 +19,17 @@ see [CREDITS.md](CREDITS.md).
 
 > Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
 
+## What's new in 1.0.1
+
+- **Hunting no longer gets stuck on one animal.** Before, a hunt that ran out of time without a
+  kill could pick the same animal straight away, again and again. It was seen live: eleven hunts in
+  a row of one rabbit while the food bar fell from 18 to 4. Now an animal that two hunts could not
+  kill is left alone for three minutes, and the bot hunts a different one.
+- A new test checks this: a rabbit that two hunts could not kill is passed over for the cow beside
+  it.
+
+The full list of changes is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Requirements
 
 - Minecraft Java Edition **1.21.9**. The bot is tested on it; other versions are auto-detected but
@@ -30,8 +41,8 @@ see [CREDITS.md](CREDITS.md).
 ## Quick start
 
 ```bash
-git clone <this repository>
-cd mc-jev-bot
+git clone https://github.com/KishoreXO/mint-minecraft-bot.git
+cd mint-minecraft-bot
 npm install
 cp .env.example .env        # on Windows: copy .env.example .env
 ```

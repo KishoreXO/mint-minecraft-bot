@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>3D view</title>
+  <style>
+    html { overflow: hidden; }
+    html, body { height: 100%; margin: 0; padding: 0; background: #0b2a1f; }
+    canvas { height: 100%; width: 100%; display: block; }
+  </style>
+  <script>
+    // prismarine-viewer's own page, with two changes. See viewerPage() in
+    // src/dashboard.js for why.
+    (function () {
+      // 1. Render at a capped pixel ratio. The bundle sizes its canvas by
+      //    devicePixelRatio, which on a scaled laptop screen is 1.5-2.25x the
+      //    pixels for a panel this size, on a GPU that is also running the game.
+      var cap = Number('__PIXEL_RATIO__');
+      var real = window.devicePixelRatio || 1;
+      if (cap > 0 && real > cap) {
+        try {
+          Object.defineProperty(window, 'devicePixelRatio', { get: function () { return cap; } });
+        } catch (e) { /* keep the real ratio */ }
+      }
+      // 2. Say how fast it is actually drawing, so the dashboard can show it.
+      var frames = 0;
+      var since = performance.now();
+      function count(t) {
+        frames++;
+        if (t - since >= 1000) {
+          try {
+            window.parent.postMessage({ type: 'viewer-fps', fps: Math.round((frames * 1000) / (t - since)) }, '*');
+          } catch (e) { /* no parent */ }
+          frames = 0;
+          since = t;
+        }
+        window.requestAnimationFrame(count);
+      }
+      window.requestAnimationFrame(count);
+    }());
+  </script>
+</head>
+<body>
+  <script src="index.js"></script>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bot dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="/icon/diamond_pickaxe">
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+
+  <div class="boot" id="boot" aria-hidden="true"><pre id="bootText"></pre></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name glow">&#9612;<span id="botName">BOT</span></span>
+      <span class="brand-sub"><span id="brandSub">LOCALHOST</span></span>
+    </div>
+    <div class="live" id="live" role="status" aria-live="polite"><span class="dot"></span><span id="liveText">LINKING</span></div>
+    <div class="daytime">
+      <svg id="sunIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <b id="day">DAY –</b><span id="dusk">–</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="views">
+      <button type="button" role="tab" class="tab on" data-view="live" aria-selected="true" aria-controls="viewLive">LIVE <kbd>1</kbd></button>
+      <button type="button" role="tab" class="tab" data-view="history" aria-selected="false" aria-controls="viewHistory">HISTORY <kbd>2</kbd></button>
+    </nav>
+    <div class="topstats">
+      <div class="ts"><label>UPTIME</label><b id="uptime">–</b></div>
+      <div class="ts"><label>DEATHS</label><b id="deaths" class="red">0</b></div>
+      <div class="ts"><label>CHECKS/S</label><b id="cps" class="cyan">–</b></div>
+      <div class="ts" title="Jev calls answered, of all asked, this session"><label>JEV OK</label><b id="jevHit" class="violet">–</b></div>
+      <div class="ts" title="Event-loop stalls over 400ms this session — a busy or out-of-memory laptop shows here first"><label>STALLS</label><b id="stalls">–</b></div>
+      <div class="ts"><label>PING</label><b id="ping">–</b></div>
+    </div>
+  </header>
+
+  <main id="viewLive" class="live-view">
+    <div class="col-main">
+      <section class="panel feed3d" id="feed3d">
+        <iframe id="viewer" src="about:blank" title="The bot's world in 3D"></iframe>
+        <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+        <svg class="crosshair" aria-hidden="true" width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true"><circle cx="22" cy="22" r="10"/><path d="M22 2v10M22 32v10M2 22h10M32 22h10"/></svg>
+
+        <div class="now" id="now">
+          <div class="now-icon"><img id="nowIcon" class="px" alt=""></div>
+          <div class="now-body">
+            <div class="now-tag" id="nowTag">&#9654; EXECUTING</div>
+            <div class="now-text glow" id="nowText">AWAITING LINK</div>
+            <div class="now-sub" id="nowSub"></div>
+          </div>
+        </div>
+
+        <div class="chips">
+          <span class="chip" id="coords">–</span>
+          <span class="chip cyan" id="biome">–</span>
+          <span class="chip" id="threat">THREAT –</span>
+          <span class="chip water" id="waterChip" hidden>IN WATER</span>
+        </div>
+
+        <div class="vitals">
+          <div class="vrow"><label class="red">HP</label><div class="segs red" id="hpSegs"></div><span id="hpNum">–</span></div>
+          <div class="vrow"><label class="amber">FOOD</label><div class="segs amber" id="foodSegs"></div><span id="foodNum">–</span></div>
+          <div class="vrow" id="airRow" hidden><label class="cyan">AIR</label><div class="segs cyan" id="airSegs"></div><span id="airNum">–</span></div>
+          <div class="held"><img id="heldIcon" class="px" alt=""><span id="heldName">empty hand</span></div>
+        </div>
+
+        <div class="compass" id="compass" aria-label="heading"></div>
+
+        <div class="cam" role="group" aria-label="camera">
+          <button type="button" data-cam="0" aria-pressed="false">ORBIT</button>
+          <button type="button" data-cam="1" aria-pressed="false">BOT'S EYES</button>
+          <button type="button" data-cam="off" aria-pressed="false" title="Unload the 3D view to save memory (key 3)">3D OFF</button>
+        </div>
+        <span class="fps3d" id="fps3d" hidden>3D – FPS</span>
+        <div class="no3d-note" aria-hidden="true">3D VIEW OFF — press 3 or ORBIT to bring it back</div>
+
+        <div class="offline" id="offline">
+          <div class="glitch" data-text="NO SIGNAL" aria-hidden="true">NO SIGNAL</div>
+          <p id="offlineText">Waiting for the world. Open it to LAN and the bot joins by itself.</p>
+        </div>
+      </section>
+
+      <section class="panel pipeline">
+        <div class="phead">
+          <h2 id="pipelineTitle">PROGRESSION // PHASES TO A DIAMOND KIT</h2>
+          <div class="pnote" id="phaseNote"></div>
+        </div>
+        <ol class="phases" id="phases"></ol>
+        <div class="supplies" id="supplies" aria-label="what the next trip needs"></div>
+      </section>
+
+      <div class="row3">
+        <section class="panel">
+          <div class="phead"><h2 id="splitsTitle">SPLITS</h2><div class="pnote" id="splitsNote"></div></div>
+          <table class="splits">
+            <thead><tr><th>MILESTONE</th><th>THIS LIFE</th><th>BEST</th><th>AVG</th><th>&#916;</th></tr></thead>
+            <tbody id="splits"></tbody>
+          </table>
+          <div class="tickers" id="tickers"></div>
+        </section>
+        <section class="panel radar-panel">
+          <div class="phead"><h2 id="radarTitle">RADAR</h2><div class="pnote" id="radarNote" aria-live="off"></div></div>
+          <canvas id="radar" role="img" aria-label="radar of nearby mobs"></canvas>
+        </section>
+        <section class="panel">
+          <div class="phead"><h2>BACKPACK</h2><div class="pnote" id="invCount"></div></div>
+          <div class="gear" id="gear"></div>
+          <div class="bag" id="bag"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="col-side">
+      <section class="panel terminal">
+        <div class="phead">
+          <h2>DECISION STREAM</h2>
+          <div class="filters" role="group" aria-label="stream filter">
+            <button type="button" data-filter="all" class="on" aria-pressed="true">ALL</button>
+            <button type="button" data-filter="decisions" aria-pressed="false">DECISIONS</button>
+            <button type="button" data-filter="events" aria-pressed="false">EVENTS</button>
+          </div>
+        </div>
+        <div class="tmeta" id="streamMeta"></div>
+        <ol class="stream" id="stream"></ol>
+        <div class="prompt">&gt; <span class="caret">_</span></div>
+      </section>
+
+      <section class="panel brain">
+        <div class="phead"><h2>BRAIN // WHO WANTS THE WHEEL</h2><div class="pnote" id="brainNote"></div></div>
+        <ol class="board" id="board"></ol>
+      </section>
+
+      <section class="panel jev">
+        <div class="phead"><h2>JEV // TYPED DECISIONS</h2><div class="pnote" id="jevFocus"></div></div>
+        <div class="jev-body">
+          <div class="jev-big"><b id="jevPct">–</b><span>DECIDED BY JEV</span></div>
+          <div class="jev-kinds" id="jevKinds"></div>
+        </div>
+        <div class="pnote" id="jevNote">bar: p50 · tick: p90 · answered/asked · failures during laptop stalls are the computer, not Jev</div>
+      </section>
+    </div>
+  </main>
+
+  <main id="viewHistory" class="history-view" hidden>
+    <div class="hhead">
+      <div>
+        <div class="kicker">RUN HISTORY</div>
+        <h1 class="glow">HOW GOOD IS THE BOT?</h1>
+      </div>
+      <div class="pnote" id="historyNote">loading…</div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="hgrid">
+      <section class="panel">
+        <div class="phead"><h2>MILESTONE FUNNEL // FROM A FRESH START</h2><div class="pnote">bars against the most-reached · reached · median · best</div></div>
+        <ol class="funnel" id="funnel"></ol>
+      </section>
+      <div class="hside">
+        <section class="panel">
+          <div class="phead"><h2>WORLD LEADERBOARD</h2></div>
+          <table class="worlds"><thead><tr><th>WORLD (SPAWN)</th><th>FURTHEST</th><th>LIVES</th><th>PLAYED</th><th>DEATHS/HR</th></tr></thead><tbody id="worlds"></tbody></table>
+        </section>
+        <section class="panel danger">
+          <div class="phead"><h2 id="deathTitle">DEATHS BY CAUSE</h2><div class="pnote">and by phase</div></div>
+          <ol class="bars" id="deathCauses"></ol>
+          <ol class="bars" id="deathPhases"></ol>
+        </section>
+      </div>
+      <section class="panel trend-panel">
+        <div class="phead">
+          <h2 id="trendTitle">TIME TO STONE PICKAXE // EACH FRESH LIFE</h2>
+          <div class="filters" role="group" aria-label="trend metric">
+            <button type="button" data-metric="stonePickaxeMs" class="on" aria-pressed="true">STONE PICK</button>
+            <button type="button" data-metric="ironPickaxeMs" aria-pressed="false">IRON PICK</button>
+            <button type="button" data-metric="lifeMs" aria-pressed="false">LIFE LENGTH</button>
+          </div>
+        </div>
+        <div class="trend" id="trend"></div>
+        <div class="pnote" id="trendNote"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <div class="death" id="death" hidden role="dialog" aria-modal="true" aria-labelledby="deathTitleText" aria-describedby="deathWhy">
+    <div class="death-card">
+      <div class="glitch red" data-text="SIGNAL LOST" aria-hidden="true">SIGNAL LOST</div>
+      <h2 class="sr-only" id="deathTitleText">The bot died</h2>
+      <div class="death-why" id="deathWhy"></div>
+      <ol class="death-replay" id="deathReplay"></ol>
+      <button type="button" id="deathClose">DISMISS</button>
+    </div>
+  </div>
+
+  <footer class="foot">
+    read-only · this computer only · keys: <kbd>1</kbd> live <kbd>2</kbd> history <kbd>3</kbd> 3D on/off <kbd>S</kbd> sound
+    · <label><input type="checkbox" id="sound"> milestone sound</label>
+    · <label><input type="checkbox" id="keys" checked> single-key shortcuts</label>
+    · stream overlay: <a href="/?overlay=1">/?overlay=1</a>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

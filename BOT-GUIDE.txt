@@ -1,5 +1,5 @@
 ===============================================================================
-  THE BOT, EXPLAINED  (mc-jev-bot; the bot is called "Mint" by default)
+  THE BOT, EXPLAINED  (mint-minecraft-bot; the bot is called "Mint" by default)
 ===============================================================================
 
 Everything about what the bot does, how it decides, what it remembers, what the

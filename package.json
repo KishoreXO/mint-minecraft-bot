@@ -1,6 +1,6 @@
 {
   "name": "mc-jev-bot",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An autonomous Minecraft survival bot that plays from empty hands to a full diamond kit, with a live web dashboard and 3D view.",
   "main": "index.js",
   "scripts": {
